@@ -1,0 +1,26 @@
+{
+  "canisters": {
+    "investment-app-backend": {
+      "main": "src/investment-app-backend/main.mo",
+      "type": "motoko"
+    },
+    "investment-app-frontend": {
+      "dependencies": [
+        "investment-app-backend"
+      ],
+      "source": [
+        "src/investment-app-frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "investment-app-frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
