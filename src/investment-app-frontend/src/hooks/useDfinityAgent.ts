@@ -33,6 +33,9 @@ export const useDfinityAgent: UseDfinityAgent = () => {
         identity,
       });
 
+      //TODO: Remove it after deploy to the mainnet
+      await agent.fetchRootKey();
+
       const generatedActor = Actor.createActor(idlFactory, {
         agent,
         canisterId: Principal.fromText(canisterId),

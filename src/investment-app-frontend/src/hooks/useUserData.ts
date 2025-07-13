@@ -60,6 +60,7 @@ export const useUserData: UseUserData = () => {
         });
       }
     } catch (error) {
+      console.log('REGISTRATION ERROR ', error);
       toast.error('An error occured during the registration');
     } finally {
       setIsLoading(false);
