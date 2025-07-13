@@ -1,5 +1,11 @@
+import DefaultPageLayout from './components/ui/DefaultPageLayout';
+
 function App() {
-  return <></>;
+  return (
+    <DefaultPageLayout>
+      <></>
+    </DefaultPageLayout>
+  );
 }
 
 export default App;
