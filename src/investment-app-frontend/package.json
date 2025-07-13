@@ -17,7 +17,7 @@
     "@dfinity/identity": "^2.3.0",
     "@dfinity/ledger-icp": "^2.6.11",
     "@dfinity/principal": "^2.3.0",
-    "@nfid/identitykit": "^1.0.10",
+    "@nfid/identitykit": "1.0.10",
     "@reduxjs/toolkit": "^2.6.1",
     "clsx": "^2.1.1",
     "react": "^18.2.0",
