@@ -16,22 +16,24 @@ const host = 'http://127.0.0.1:4943';
 const canisterId = import.meta.env.VITE_CANISTER_ID_BACKEND;
 
 export const useDfinityAgent: UseDfinityAgent = () => {
-  const identity = useIdentity();
+  const identityKit = useIdentity();
 
   const [actor, setActor] = useState<ActorSubclass<
     Record<string, ActorMethod<unknown[], unknown>>
   > | null>(null);
 
-  if (!identity) {
+  if (!identityKit) {
     return null;
   }
 
   const getActorAndSet = async () => {
     try {
-      const agent = await HttpAgent.create({
-        host,
-        identity,
-      });
+      if (!identityKit?.agent || !identityKit?.identity) {
+        setActor(null);
+        return;
+      }
+
+      const agent = identityKit.agent;
 
       //TODO: Remove it after deploy to the mainnet
       await agent.fetchRootKey();
@@ -49,7 +51,7 @@ export const useDfinityAgent: UseDfinityAgent = () => {
 
   useEffect(() => {
     getActorAndSet();
-  }, [identity]);
+  }, [identityKit]);
 
   return actor;
 };
