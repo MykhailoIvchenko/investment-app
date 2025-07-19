@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useCkBTC } from '../hooks/useCkBTC';
 import Input from './ui/Input';
 import Button from './ui/Button';
+import { toast } from 'react-toastify';
 
 const ApproveTransfer: React.FC = () => {
   const { approveTransfer, isReady } = useCkBTC();
@@ -12,7 +13,7 @@ const ApproveTransfer: React.FC = () => {
     const numAmount = parseFloat(amount);
 
     if (isNaN(numAmount) || numAmount <= 0) {
-      alert('Enter a valid positive amount');
+      toast.error('Enter a valid positive amount');
       return;
     }
 
@@ -29,7 +30,9 @@ const ApproveTransfer: React.FC = () => {
 
   return (
     <div className='approve-container'>
-      <h3>Approve Vault Canister to transfer ckBTC</h3>
+      <h3 className='section-title'>
+        Approve Vault Canister to transfer ckBTC
+      </h3>
 
       <Input
         className='input'

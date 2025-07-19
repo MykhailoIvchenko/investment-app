@@ -14,6 +14,7 @@ export function useRecurring() {
     setLoading(true);
     try {
       // TODO: call vault.getRecurringConfig()
+      // const fakeConfig = { interval: 'weekly', amount: BigInt(100_000_000) };
       const fakeConfig = { interval: 'weekly', amount: BigInt(100_000_000) };
       await new Promise((res) => setTimeout(res, 800));
       setConfig(fakeConfig);
