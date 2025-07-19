@@ -28,12 +28,17 @@ export const useDfinityAgent: UseDfinityAgent = () => {
 
   const getActorAndSet = async () => {
     try {
-      if (!identityKit?.agent || !identityKit?.identity) {
-        setActor(null);
-        return;
-      }
+      // if (!identityKit.agent || !identityKit?.identity) {
+      //   setActor(null);
+      //   return;
+      // }
 
-      const agent = identityKit.agent;
+      // const agent = identityKit.agent;
+
+      const agent = await HttpAgent.create({
+        host,
+        identity: identityKit,
+      });
 
       //TODO: Remove it after deploy to the mainnet
       await agent.fetchRootKey();
@@ -45,6 +50,7 @@ export const useDfinityAgent: UseDfinityAgent = () => {
 
       setActor(generatedActor);
     } catch (error) {
+      console.log('Error creating actor:', error);
       toast.error('An error occured during the agent initialization');
     }
   };

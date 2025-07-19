@@ -28,7 +28,6 @@ export const useUserData: UseUserData = () => {
 
       if (principalId && actor) {
         const userDataArray = (await actor.get_user()) as IUser[];
-
         if (userDataArray.length > 0) {
           const userData = userDataArray[0];
 
@@ -36,7 +35,6 @@ export const useUserData: UseUserData = () => {
             username: userData!.username,
             principalId: principalId,
           };
-
           setUserData(dataToSet);
         }
       }
