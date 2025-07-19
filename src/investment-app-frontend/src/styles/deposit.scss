@@ -1,0 +1,66 @@
+.deposit-container {
+  max-width: 700px;
+  margin: 30px auto;
+  padding: 24px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 0 15px #ccc;
+  color: #333;
+
+  h1,
+  h2 {
+    margin-bottom: 12px;
+  }
+}
+
+.approve-container,
+.recurring-container {
+  margin-top: 20px;
+  padding: 16px;
+  background-color: #f0f4ff;
+  border-radius: 6px;
+}
+
+.approve-container {
+  input {
+    width: 150px;
+  }
+}
+
+.withdraw-section {
+  margin-top: 20px;
+  padding: 16px;
+  background-color: #f0f4ff;
+  border-radius: 6px;
+
+  input {
+    width: 150px;
+  }
+}
+
+.radio-label {
+  margin-right: 15px;
+  font-weight: 500;
+  cursor: pointer;
+
+  input {
+    margin-right: 6px;
+  }
+}
+
+.amount-input-wrapper {
+  margin-top: 10px;
+
+  input {
+    width: 150px;
+  }
+}
+
+.section-title {
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.btn {
+  min-width: 200px;
+}
