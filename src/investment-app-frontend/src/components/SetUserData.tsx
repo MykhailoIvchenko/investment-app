@@ -8,7 +8,7 @@ interface IUserDataForm {
   username: string;
 }
 
-const AddUserName: React.FC = () => {
+const SetUserData: React.FC = () => {
   const {
     control,
     formState: { errors },
@@ -61,4 +61,4 @@ const AddUserName: React.FC = () => {
   );
 };
 
-export default AddUserName;
+export default SetUserData;

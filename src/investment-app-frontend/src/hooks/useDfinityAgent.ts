@@ -16,22 +16,32 @@ const host = 'http://127.0.0.1:4943';
 const canisterId = import.meta.env.VITE_CANISTER_ID_BACKEND;
 
 export const useDfinityAgent: UseDfinityAgent = () => {
-  const identity = useIdentity();
+  const identityKit = useIdentity();
 
   const [actor, setActor] = useState<ActorSubclass<
     Record<string, ActorMethod<unknown[], unknown>>
   > | null>(null);
 
-  if (!identity) {
+  if (!identityKit) {
     return null;
   }
 
   const getActorAndSet = async () => {
     try {
+      // if (!identityKit.agent || !identityKit?.identity) {
+      //   setActor(null);
+      //   return;
+      // }
+
+      // const agent = identityKit.agent;
+
       const agent = await HttpAgent.create({
         host,
-        identity,
+        identity: identityKit,
       });
+
+      //TODO: Remove it after deploy to the mainnet
+      await agent.fetchRootKey();
 
       const generatedActor = Actor.createActor(idlFactory, {
         agent,
@@ -40,13 +50,14 @@ export const useDfinityAgent: UseDfinityAgent = () => {
 
       setActor(generatedActor);
     } catch (error) {
+      console.log('Error creating actor:', error);
       toast.error('An error occured during the agent initialization');
     }
   };
 
   useEffect(() => {
     getActorAndSet();
-  }, [identity]);
+  }, [identityKit]);
 
   return actor;
 };
