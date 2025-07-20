@@ -19,7 +19,7 @@ actor InvestmentApp {
   stable var users: Trie.Trie<Text, Types.User> = Trie.empty();
   stable var vaultUsers: Trie.Trie<Principal, Types.UserConfig> = Trie.empty();
 
-  private var timers: [Nat] = [];
+  private var timers: Trie.Trie<Text, Nat> = Trie.empty();
 
   private func get_user_by_id(principal_id: Text) : ?Types.User {
     switch (Trie.get(users, Helpers.key(principal_id), Text.equal)) {
@@ -159,7 +159,7 @@ actor InvestmentApp {
       owner = caller;
       subaccount = wallet;
     };
-    let balance = await ledger_canister.icrc1_balance_of(owner_rec);
+    let balance = await ckbtcCanister.icrc1_balance_of(owner_rec);
     return Nat64.fromNat(balance);
   };
 
@@ -185,37 +185,116 @@ actor InvestmentApp {
 
         update_user_recurring(principal_id, subaccount, recurring);
 
-        func pay() : async () {
+        func pay(last_deposit_time: Time.Time) : async () {
           let transfer_result = await deposit_to_vault_account(amount);
 
           switch (transfer_result) {
             case (#ok(_)) {
               let next_time = switch (frequency) {
-                case (#daily) Time.addSeconds(now, 86400);
-                case (#weekly) Time.addSeconds(now, 604800);
-                case (#monthly) Time.addDays(now, 30);
-                case (#quarterly) Time.addDays(now, 90);
+                case (#daily) Time.addSeconds(last_deposit_time, 86400);
+                case (#weekly) Time.addSeconds(last_deposit_time, 604800);
+                case (#monthly) Time.addDays(last_deposit_time, 30);
+                case (#quarterly) Time.addDays(last_deposit_time, 90);
               };
 
               update_next_deposit_time(principal_id, subaccount, next_time);
 
-              let delay = Time.diff(next_time, Time.now());
+              let delay_in_seconds = Time.diff(next_time, Time.now());
+              let delay_in_nanos = if (delay_in_seconds > 0) {
+                delay_in_seconds * 1_000_000_000;
+              } else {
+                1_000_000_000;
+              };
 
-              Timer.setTimer(#nanoseconds delay, pay);
+              let timer_id = Timer.setTimer(#nanoseconds delay_in_nanos, func () {
+                pay(next_time);
+              });
+
+              timers := Trie.put<Text, Nat>(timers, Helpers.key(principal_id), Nat.equal, timer_id).0;
             };
-            case (#err(_)) {
-              Debug.print("Payment failed");
+            case (#err(e)) {
+              Debug.print("Payment failed: " # e);
             };
           };
         };
 
-        await pay();
+        let first_timer_id = Timer.setTimer(#nanoseconds 0, func () {
+          pay(now);
+        });
+
+        timers := Trie.put<Text, Nat>(timers, Helpers.key(principal_id), Nat.equal, first_timer_id).0;
 
         return #ok(1);
       };
     };
   };
 
+
+  public shared ({ caller }) func withdraw_from_vault(
+    from_subaccount: Blob,
+    amount: Nat
+  ) : async Result.Result<Icrc1Ledger.BlockIndex, Text> {
+
+    let principal_id = Principal.toText(caller);
+
+    switch (get_user_by_id(principal_id)) {
+      case (null) {
+        return #err("User not registered");
+      };
+      case (?user) {
+        let target_wallet = Array.find<Types.WalletConfig>(user.wallets_configs, func (w) {
+          w.subaccount == from_subaccount
+        });
+
+        switch (target_wallet) {
+          case (null) {
+            return #err("Wallet with given subaccount not found");
+          };
+          case (?wallet) {
+            switch (Trie.get(timers, Trie.key(principal_id), Nat.equal)) {
+              case (?timer_id) {
+                Timer.cancelTimer(timer_id);
+                timers := Trie.remove<Text, Nat>(timers, Trie.key(principal_id)).0;
+              };
+              case (null) {};
+            };
+
+            let updated_wallet : Types.WalletConfig = {
+              subaccount = wallet.subaccount;
+              account_address = wallet.account_address;
+              recurring = null;
+              balance = wallet.balance;
+            };
+
+            update_user_wallet_config(principal_id, updated_wallet);
+
+            let transfer_args: ICRC1.TransferArgs = {
+              from_subaccount = ?from_subaccount;
+              to = {
+                owner = caller;
+                subaccount = null;
+              };
+              amount = amount;
+              fee = ?5;
+              memo = null;
+              created_at_time = ?Time.now();
+              expires_at = null;
+            };
+
+            try {
+              let result = await ckbtcCanister.icrc2_transfer_from(transfer_args);
+              switch (result) {
+                case (#ok(block_index)) return #ok(block_index);
+                case (#err(transfer_error)) return #err("Transfer failed: " # debug_show(transfer_error));
+              };
+            } catch (e) {
+              return #err("Unexpected error during transfer: " # Error.message(e));
+            };
+          };
+        };
+      };
+    };
+  };
 
   //Functions for development and debug
   public query func get_all_users() : async Trie.Trie<Text, Types.User> {
