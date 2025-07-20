@@ -2,12 +2,6 @@ import Trie "mo:base/Trie";
 
 type Key<K> = Trie.Key<K>;
 
-
-type User = {
-  principal_id: Text;
-  username : Text;
-};
-
 type Frequency = {
   #daily;
   #weekly;
@@ -15,18 +9,19 @@ type Frequency = {
   #quarterly;
 };
 
-type RecurringConfig = {
-  amount: Nat;
-  frequency: Frequency;
-  nextDepositTime: Nat64;
+type WalletConfig = {
+  subaccount: Blob;
+  account_address: Text;
+  recurring: ?{
+    amount: Nat;
+    frequency: Frequency;
+    next_deposit_time: Nat64;
+  };
+  balance: Nat;
 };
 
-type UserConfig = {
-    subaccount: [Nat8];
-    recurring: ?{
-      amount: Nat;
-      frequency: Frequency;
-      nextDepositTime: Nat64;
-    };
-    balance: Nat;
-  };
+type User = {
+  principal_id: Text;
+  username : Text;
+  wallets_configs: [WalletConfig];
+};

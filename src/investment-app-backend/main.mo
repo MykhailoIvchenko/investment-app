@@ -46,6 +46,20 @@ actor InvestmentApp {
     }
   };
 
+  private func make_subaccount(principal: Principal, acc_id: Nat) : Blob {
+    var subaccount = Array.init<Nat8>(32, 0);
+    subaccount[0] := Nat8.fromNat(acc_id);
+
+    let userBytesArray = Blob.toArray(Principal.toBlob(principal));
+    for (i in userBytesArray.keys()) {
+      if (i + 1 < 32) {
+        subaccount[i + 1] := userBytesArray[i];
+      }
+    };
+
+    return Blob.fromArrayMut(subaccount);
+  };
+
   public shared ({caller}) func register_user(username: Text) : async Types.User {
     var authenticated = Helpers.is_authenticated(caller);
 
@@ -64,15 +78,28 @@ actor InvestmentApp {
     if (username_exists) {
       throw Error.reject("Username should be unique. And the username you've provided already exists");
     };
-    
-    let principal_id = Principal.toText(caller);
 
+    let principal_id = Principal.toText(caller);
     let user_key : Trie.Key<Text> = Helpers.key(principal_id);
 
-    let new_user: Types.User = { principal_id = principal_id; username = username };
+    let subaccount = make_subaccount(caller, 0);
+
+    let account_address = Helpers.convert_buffer_to_hex(Blob.toArray(Principal.toLedgerAccount(caller, ?subaccount)));
+
+    let wallet_config : Types.WalletConfig = {
+      subaccount = subaccount;
+      account_address = account_address;
+      recurring = null;
+      balance = 0;
+    };
+
+    let new_user: Types.User = {
+      principal_id = principal_id;
+      username = username;
+      wallets_configs = [wallet_config];
+    };
 
     usernames := Trie.put(usernames, Helpers.key(username), Text.equal, username).0;
-
     users := Trie.put(users, user_key, Text.equal, new_user).0;
 
     return new_user;
@@ -81,19 +108,6 @@ actor InvestmentApp {
   let ckbtcCanisterId : Principal = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
   let icrc1 : ICRC1.ICRC1 = actor(Principal.toText(ckbtcCanisterId));
 
-  private func make_subaccount(principal: Principal, acc_id: Nat) : Blob {
-    var subaccount = Array.init<Nat8>(32, 0);
-    subaccount[0] := Nat8.fromNat(acc_id);
-
-    let userBytesArray = Blob.toArray(Principal.toBlob(principal));
-    for (i in userBytesArray.keys()) {
-      if (i + 1 < 32) {
-        subaccount[i + 1] := userBytesArray[i];
-      }
-    };
-
-    return Blob.fromArrayMut(subaccount);
-  };
 
   //Functions for development and debug
   public query func get_all_users() : async Trie.Trie<Text, Types.User> {
