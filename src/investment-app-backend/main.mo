@@ -19,6 +19,8 @@ actor InvestmentApp {
   stable var users: Trie.Trie<Text, Types.User> = Trie.empty();
   stable var vaultUsers: Trie.Trie<Principal, Types.UserConfig> = Trie.empty();
 
+  private var timers: Trie.Trie<Text, Nat> = Trie.empty();
+
   private func get_user_by_id(principal_id: Text) : ?Types.User {
     switch (Trie.get(users, Helpers.key(principal_id), Text.equal)) {
         case (?user) return ?user;
@@ -108,6 +110,191 @@ actor InvestmentApp {
   let ckbtcCanisterId : Principal = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
   let icrc1 : ICRC1.ICRC1 = actor(Principal.toText(ckbtcCanisterId));
 
+  let ckbtcCanister = actor("rrkah-fqaaa-aaaaa-aaaaq-cai") : actor {
+    icrc2_transfer_from : shared ICRC1.TransferArgs -> async ICRC1.Result;
+    icrc1_balance_of : shared query ICRC1.Account -> async ICRC1.Token;
+  };
+
+  public shared ({ caller }) func deposit_to_vault_account(
+    amount: Nat
+  ) : async ICRC1.Result<Nat, Text> {
+    let principal_id = Principal.toText(caller);
+
+    switch (get_user_by_id(principal_id)) {
+      case (null) {
+        return #err("User not registered");
+      };
+      case (?user) {
+        let to_subaccount = user.wallets_configs[0].subaccount;
+
+        let transfer_args: ICRC1.TransferArgs = {
+          from_subaccount = null;
+          to = {
+            owner = Principal.fromActor(this);
+            subaccount = ?to_subaccount;
+          };
+
+          amount = amount;
+          fee = ?5;
+          memo = null;
+          created_at_time = ?Time.now();
+          expires_at = null;
+        };
+
+        try {
+          let result = await ckbtcCanister.icrc2_transfer_from(transfer_args);
+          switch (result) {
+            case (#ok(block_index)) return #ok(block_index);
+            case (#err(transfer_error)) return #err("Transfer failed: " # debug_show(transfer_error));
+          };
+        } catch (e) {
+          return #err("Caught error: " # Error.message(e));
+        };
+      };
+    };
+  };
+
+  public shared ({ caller }) func get_wallet_balance(wallet: ?Blob) : async Nat64 {
+    let owner_rec = {
+      owner = caller;
+      subaccount = wallet;
+    };
+    let balance = await ckbtcCanister.icrc1_balance_of(owner_rec);
+    return Nat64.fromNat(balance);
+  };
+
+  public shared ({ caller }) func create_recurrent_deposit(
+    amount: Nat,
+    frequency: Types.Frequency,
+  ) : async Result.Result<Nat, Text> {
+    let principal_id = Principal.toText(caller);
+
+    switch (get_user_by_id(principal_id)) {
+      case (null) return #err("User not registered");
+      case (?user) {
+
+        let subaccount = user.wallets_configs[0].subaccount;
+
+        let now = Time.now();
+
+        let recurring = {
+          amount = amount;
+          frequency = frequency;
+          next_deposit_time = now;
+        };
+
+        update_user_recurring(principal_id, subaccount, recurring);
+
+        func pay(last_deposit_time: Time.Time) : async () {
+          let transfer_result = await deposit_to_vault_account(amount);
+
+          switch (transfer_result) {
+            case (#ok(_)) {
+              let next_time = switch (frequency) {
+                case (#daily) Time.addSeconds(last_deposit_time, 86400);
+                case (#weekly) Time.addSeconds(last_deposit_time, 604800);
+                case (#monthly) Time.addDays(last_deposit_time, 30);
+                case (#quarterly) Time.addDays(last_deposit_time, 90);
+              };
+
+              update_next_deposit_time(principal_id, subaccount, next_time);
+
+              let delay_in_seconds = Time.diff(next_time, Time.now());
+              let delay_in_nanos = if (delay_in_seconds > 0) {
+                delay_in_seconds * 1_000_000_000;
+              } else {
+                1_000_000_000;
+              };
+
+              let timer_id = Timer.setTimer(#nanoseconds delay_in_nanos, func () {
+                pay(next_time);
+              });
+
+              timers := Trie.put<Text, Nat>(timers, Helpers.key(principal_id), Nat.equal, timer_id).0;
+            };
+            case (#err(e)) {
+              Debug.print("Payment failed: " # e);
+            };
+          };
+        };
+
+        let first_timer_id = Timer.setTimer(#nanoseconds 0, func () {
+          pay(now);
+        });
+
+        timers := Trie.put<Text, Nat>(timers, Helpers.key(principal_id), Nat.equal, first_timer_id).0;
+
+        return #ok(1);
+      };
+    };
+  };
+
+
+  public shared ({ caller }) func withdraw_from_vault(
+    from_subaccount: Blob,
+    amount: Nat
+  ) : async Result.Result<Icrc1Ledger.BlockIndex, Text> {
+
+    let principal_id = Principal.toText(caller);
+
+    switch (get_user_by_id(principal_id)) {
+      case (null) {
+        return #err("User not registered");
+      };
+      case (?user) {
+        let target_wallet = Array.find<Types.WalletConfig>(user.wallets_configs, func (w) {
+          w.subaccount == from_subaccount
+        });
+
+        switch (target_wallet) {
+          case (null) {
+            return #err("Wallet with given subaccount not found");
+          };
+          case (?wallet) {
+            switch (Trie.get(timers, Trie.key(principal_id), Nat.equal)) {
+              case (?timer_id) {
+                Timer.cancelTimer(timer_id);
+                timers := Trie.remove<Text, Nat>(timers, Trie.key(principal_id)).0;
+              };
+              case (null) {};
+            };
+
+            let updated_wallet : Types.WalletConfig = {
+              subaccount = wallet.subaccount;
+              account_address = wallet.account_address;
+              recurring = null;
+              balance = wallet.balance;
+            };
+
+            update_user_wallet_config(principal_id, updated_wallet);
+
+            let transfer_args: ICRC1.TransferArgs = {
+              from_subaccount = ?from_subaccount;
+              to = {
+                owner = caller;
+                subaccount = null;
+              };
+              amount = amount;
+              fee = ?5;
+              memo = null;
+              created_at_time = ?Time.now();
+              expires_at = null;
+            };
+
+            try {
+              let result = await ckbtcCanister.icrc2_transfer_from(transfer_args);
+              switch (result) {
+                case (#ok(block_index)) return #ok(block_index);
+                case (#err(transfer_error)) return #err("Transfer failed: " # debug_show(transfer_error));
+              };
+            } catch (e) {
+              return #err("Unexpected error during transfer: " # Error.message(e));
+            };
+          };
+        };
+      };
+    };
+  };
 
   //Functions for development and debug
   public query func get_all_users() : async Trie.Trie<Text, Types.User> {
