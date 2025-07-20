@@ -9,6 +9,10 @@ import Time "mo:base/Time";
 import Array "mo:base/Array";
 import Blob "mo:base/Blob";
 import Nat8 "mo:base/Nat8";
+import Nat64 "mo:base/Nat64";
+import Nat "mo:base/Nat";
+import Timer "mo:base/Timer";
+import Debug "mo:base/Debug";
 // import Actor "mo:base/Actor";
 import Types "types";
 import Helpers "utils/helpers";
@@ -17,7 +21,6 @@ import ICRC1 "./icrc1";
 actor InvestmentApp {
   stable var usernames: Trie.Trie<Text, Text> = Trie.empty();
   stable var users: Trie.Trie<Text, Types.User> = Trie.empty();
-  stable var vaultUsers: Trie.Trie<Principal, Types.UserConfig> = Trie.empty();
 
   private var timers: Trie.Trie<Text, Nat> = Trie.empty();
 
@@ -35,6 +38,7 @@ actor InvestmentApp {
     }
   };
 
+
   public query ({ caller }) func get_user() : async ?Types.User {
     let authenticated = Helpers.is_authenticated(caller);
 
@@ -43,7 +47,7 @@ actor InvestmentApp {
     let principal_id = Principal.toText(caller);
 
     switch (Trie.get(users, Helpers.key(principal_id), Text.equal)) {
-        case (?user) return ?{ principal_id = user.principal_id; username = user.username };
+        case (?user) return ?{ principal_id = user.principal_id; username = user.username; wallets_configs = user.wallets_configs};
         case (_) return null;
     }
   };
@@ -111,7 +115,7 @@ actor InvestmentApp {
   let icrc1 : ICRC1.ICRC1 = actor(Principal.toText(ckbtcCanisterId));
 
   let ckbtcCanister = actor("rrkah-fqaaa-aaaaa-aaaaq-cai") : actor {
-    icrc2_transfer_from : shared ICRC1.TransferArgs -> async ICRC1.Result;
+    icrc2_transfer_from : shared ICRC1.TransferArgs -> async ICRC1.Result<Nat, ICRC1.TransferError>;
     icrc1_balance_of : shared query ICRC1.Account -> async ICRC1.Token;
   };
 
@@ -130,14 +134,14 @@ actor InvestmentApp {
         let transfer_args: ICRC1.TransferArgs = {
           from_subaccount = null;
           to = {
-            owner = Principal.fromActor(this);
+            owner = caller;
             subaccount = ?to_subaccount;
           };
 
           amount = amount;
           fee = ?5;
           memo = null;
-          created_at_time = ?Time.now();
+          created_at_time = null;
           expires_at = null;
         };
 
@@ -163,54 +167,82 @@ actor InvestmentApp {
     return Nat64.fromNat(balance);
   };
 
+
+  func update_user_recurring(
+    principal_id: Text,
+    subaccount: Blob,
+    recurring: ?{
+      amount: Nat;
+      frequency: Types.Frequency;
+      next_deposit_time: Nat64;
+    }
+  ) : async () {
+    let key = Helpers.key(principal_id);
+
+    switch (Trie.get(users, key, Text.equal)) {
+      case (null) {
+        ();
+      };
+      case (?user) {
+        let wallets = user.wallets_configs;
+
+        let updated_wallets = Array.tabulate(wallets.size(), func(i: Nat) : Types.WalletConfig {
+          let wallet = wallets[i];
+          if (Blob.equal(wallet.subaccount, subaccount)) {
+            {
+              subaccount = wallet.subaccount;
+              account_address = wallet.account_address;
+              recurring = recurring;
+              balance = wallet.balance;
+            }
+          } else {
+            wallet
+          }
+        });
+
+        let updated_user = {
+          principal_id = user.principal_id;
+          username = user.username;
+          wallets_configs = updated_wallets;
+        };
+
+        let (new_users, _) = Trie.put(users, key, Text.equal, updated_user);
+        users := new_users;
+      };
+    };
+  };
+
   public shared ({ caller }) func create_recurrent_deposit(
     amount: Nat,
     frequency: Types.Frequency,
   ) : async Result.Result<Nat, Text> {
-    let principal_id = Principal.toText(caller);
 
-    switch (get_user_by_id(principal_id)) {
+    let principal_id = Principal.toText(caller);
+    let userOpt = get_user_by_id(principal_id);
+
+    switch (userOpt) {
       case (null) return #err("User not registered");
       case (?user) {
 
         let subaccount = user.wallets_configs[0].subaccount;
 
-        let now = Time.now();
-
-        let recurring = {
-          amount = amount;
-          frequency = frequency;
-          next_deposit_time = now;
-        };
-
-        update_user_recurring(principal_id, subaccount, recurring);
-
-        func pay(last_deposit_time: Time.Time) : async () {
+        func pay() : async () {
           let transfer_result = await deposit_to_vault_account(amount);
 
           switch (transfer_result) {
             case (#ok(_)) {
-              let next_time = switch (frequency) {
-                case (#daily) Time.addSeconds(last_deposit_time, 86400);
-                case (#weekly) Time.addSeconds(last_deposit_time, 604800);
-                case (#monthly) Time.addDays(last_deposit_time, 30);
-                case (#quarterly) Time.addDays(last_deposit_time, 90);
+              Debug.print("Payment successful");
+
+              let delay_sec = switch (frequency) {
+                case (#daily) 86400;
+                case (#weekly) 604800;
+                case (#monthly) 2592000;
+                case (#quarterly) 7776000;
               };
 
-              update_next_deposit_time(principal_id, subaccount, next_time);
+              let timer_id = Timer.setTimer(#seconds delay_sec, pay);
 
-              let delay_in_seconds = Time.diff(next_time, Time.now());
-              let delay_in_nanos = if (delay_in_seconds > 0) {
-                delay_in_seconds * 1_000_000_000;
-              } else {
-                1_000_000_000;
-              };
-
-              let timer_id = Timer.setTimer(#nanoseconds delay_in_nanos, func () {
-                pay(next_time);
-              });
-
-              timers := Trie.put<Text, Nat>(timers, Helpers.key(principal_id), Nat.equal, timer_id).0;
+              timers := Trie.put<Text, Nat>(timers, Helpers.key(principal_id), Text.equal, timer_id).0;
             };
             case (#err(e)) {
               Debug.print("Payment failed: " # e);
@@ -218,22 +250,42 @@ actor InvestmentApp {
           };
         };
 
-        let first_timer_id = Timer.setTimer(#nanoseconds 0, func () {
-          pay(now);
-        });
-
-        timers := Trie.put<Text, Nat>(timers, Helpers.key(principal_id), Nat.equal, first_timer_id).0;
+        await pay();
 
         return #ok(1);
       };
     };
   };
 
+  private func update_user_wallet_config(principal_id: Text, updated_wallet: Types.WalletConfig) : () {
+    let key = Helpers.key(principal_id);
+    switch (Trie.get(users, key, Text.equal)) {
+      case (null) {};
+      case (?user) {
+        let wallets = user.wallets_configs;
+        let new_wallets = Array.tabulate(wallets.size(), func(i: Nat) : Types.WalletConfig {
+          let wallet = wallets[i];
+          if (Blob.equal(wallet.subaccount, updated_wallet.subaccount)) {
+            updated_wallet
+          } else {
+            wallet
+          }
+        });
+        let updated_user = {
+          principal_id = user.principal_id;
+          username = user.username;
+          wallets_configs = new_wallets;
+        };
+        let (new_users, _) = Trie.put(users, key, Text.equal, updated_user);
+        users := new_users;
+      };
+    };
+  };
 
   public shared ({ caller }) func withdraw_from_vault(
     from_subaccount: Blob,
     amount: Nat
-  ) : async Result.Result<Icrc1Ledger.BlockIndex, Text> {
+  ) : async Result.Result<ICRC1.BlockIndex, Text> {
 
     let principal_id = Principal.toText(caller);
 
@@ -251,10 +303,10 @@ actor InvestmentApp {
             return #err("Wallet with given subaccount not found");
           };
           case (?wallet) {
-            switch (Trie.get(timers, Trie.key(principal_id), Nat.equal)) {
+            switch (Trie.get(timers, Helpers.key(principal_id), Text.equal)) {
               case (?timer_id) {
                 Timer.cancelTimer(timer_id);
-                timers := Trie.remove<Text, Nat>(timers, Trie.key(principal_id)).0;
+                timers := Trie.remove<Text, Nat>(timers, Helpers.key(principal_id), Text.equal).0;
               };
               case (null) {};
             };
@@ -277,7 +329,7 @@ actor InvestmentApp {
               amount = amount;
               fee = ?5;
               memo = null;
-              created_at_time = ?Time.now();
+              created_at_time = null;
               expires_at = null;
             };
 

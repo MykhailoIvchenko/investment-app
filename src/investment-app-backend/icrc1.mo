@@ -48,6 +48,7 @@ module {
   };
 
   public type Token = Nat;
+  public type BlockIndex = Nat;
 
   public type ICRC1 = actor {
     icrc1_name : query () -> async Text;
