@@ -1,48 +1,57 @@
 import { useEffect, useState } from 'react';
-import { HttpAgent, Actor } from '@dfinity/agent';
+import { HttpAgent, Actor, ActorSubclass } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 // @ts-ignore
 import { useIdentity } from '@nfid/identitykit/react';
-// import { vaultIdlFactory } from '../../../declarations/vault';
 import { toast } from 'react-toastify';
+import { idlFactory as investmentAppIdlFactory } from '../../../declarations/investment-app-backend';
 
-const vaultIdlFactory = {};
-const VAULT_CANISTER_ID = 'xxx...cai';
-const HOST = 'https://icp-api.io';
+const INVESTMENT_APP_CANISTER_ID = 'uzt4z-lp777-77774-qaabq-cai';
+// const HOST = 'https://icp-api.io';
+const HOST = 'http://localhost:4943';
+
+type Result<T, E> = { Ok: T } | { Err: E };
 
 export const useVault = () => {
   const identity = useIdentity();
-  const [vaultActor, setVaultActor] = useState<any>(null);
+  const [vaultActor, setVaultActor] = useState<ActorSubclass<any> | null>(null);
 
   const getActorAndSet = async () => {
+    if (!identity) {
+      setVaultActor(null);
+      return;
+    }
+
     const agent = await HttpAgent.create({ identity, host: HOST });
 
-    const actor = Actor.createActor(vaultIdlFactory, {
+    //Remove on deploy to the mainnet
+    agent.fetchRootKey();
+
+    const actor = Actor.createActor(investmentAppIdlFactory, {
       agent,
-      canisterId: Principal.fromText(VAULT_CANISTER_ID),
+      canisterId: Principal.fromText(INVESTMENT_APP_CANISTER_ID),
     });
 
     setVaultActor(actor);
   };
 
   useEffect(() => {
-    if (!identity) {
-      setVaultActor(null);
-      return;
-    }
-
     getActorAndSet();
   }, [identity]);
 
   const deposit = async (amount: bigint) => {
-    if (!vaultActor) return;
+    if (!vaultActor) {
+      toast.error('Actor not initialized');
+      return false;
+    }
     try {
-      const result = await vaultActor.deposit(amount);
+      const result: Result<bigint, string> =
+        await vaultActor.deposit_to_vault_account(amount);
       if ('Ok' in result) {
         toast.success('Deposit successful');
         return true;
       } else {
-        toast.error('Deposit failed');
+        toast.error(`Deposit failed: ${result.Err}`);
         return false;
       }
     } catch (e) {
@@ -52,15 +61,19 @@ export const useVault = () => {
     }
   };
 
-  const withdraw = async (amount: bigint) => {
-    if (!vaultActor) return;
+  const withdraw = async (fromSubaccount: Uint8Array, amount: bigint) => {
+    if (!vaultActor) {
+      toast.error('Actor not initialized');
+      return false;
+    }
     try {
-      const result = await vaultActor.withdraw(amount);
+      const result: Result<bigint, string> =
+        await vaultActor.withdraw_from_vault(fromSubaccount, amount);
       if ('Ok' in result) {
         toast.success('Withdrawal successful');
         return true;
       } else {
-        toast.error('Withdrawal failed');
+        toast.error(`Withdrawal failed: ${result.Err}`);
         return false;
       }
     } catch (e) {
@@ -69,27 +82,40 @@ export const useVault = () => {
       return false;
     }
   };
-
   const configureRecurring = async (
-    intervalSeconds: bigint,
+    frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly',
     amount: bigint
   ) => {
-    if (!vaultActor) return;
+    if (!vaultActor) {
+      toast.error('Actor not initialized');
+      return false;
+    }
+    const frequencyVariant = (() => {
+      switch (frequency) {
+        case 'daily':
+          return { daily: null };
+        case 'weekly':
+          return { weekly: null };
+        case 'monthly':
+          return { monthly: null };
+        case 'quarterly':
+          return { quarterly: null };
+      }
+    })();
+
     try {
-      const result = await vaultActor.configure_recurring({
-        interval_seconds: intervalSeconds,
-        amount,
-      });
+      const result: Result<bigint, string> =
+        await vaultActor.create_recurrent_deposit(amount, frequencyVariant);
       if ('Ok' in result) {
-        toast.success('Recurring config updated');
+        toast.success('Recurring configuration updated');
         return true;
       } else {
-        toast.error('Failed to update recurring config');
+        toast.error(`Failed to update recurring config: ${result.Err}`);
         return false;
       }
     } catch (e) {
       console.error(e);
-      toast.error('Error during recurring config update');
+      toast.error('Error during recurring configuration');
       return false;
     }
   };

@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
-import { useCkBTC } from '../hooks/useCkBTC';
 import Input from './ui/Input';
 import Button from './ui/Button';
 import { toast } from 'react-toastify';
 
-const ApproveTransfer: React.FC = () => {
-  const { approveTransfer, isReady } = useCkBTC();
+interface IApproveTransferProps {
+  isReady: boolean;
+  approveTransfer: (amount: bigint) => Promise<boolean | undefined>;
+}
+
+const ApproveTransfer: React.FC<IApproveTransferProps> = ({
+  approveTransfer,
+  isReady,
+}) => {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = React.useState(false);
 

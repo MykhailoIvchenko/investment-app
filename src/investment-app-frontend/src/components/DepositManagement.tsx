@@ -6,22 +6,19 @@ import ApproveTransfer from './ApproveTransfer';
 import RecurringConfig from './RecurringConfig';
 import Input from './ui/Input';
 import Button from './ui/Button';
+import { toast } from 'react-toastify';
 
 const DepositManagement: React.FC = () => {
   const user = useSelectUser();
-  const { balance: ckbtcBalance, fetchBalance } = useCkBTC();
+  const { balance: ckbtcBalance, isReady, approveTransfer } = useCkBTC();
   const { withdraw } = useVault();
 
   const [withdrawAmount, setWithdrawAmount] = useState('');
 
-  useEffect(() => {
-    fetchBalance();
-  }, [fetchBalance]);
-
   const handleWithdraw = async () => {
     const amountNum = parseFloat(withdrawAmount);
     if (isNaN(amountNum) || amountNum <= 0) {
-      alert('Enter a valid withdrawal amount');
+      toast.error('Enter a valid withdrawal amount');
       return;
     }
     const amountBigInt = BigInt(Math.floor(amountNum * 1e8));
@@ -37,7 +34,7 @@ const DepositManagement: React.FC = () => {
         Your Wallet Balance: {ckbtcBalance ? Number(ckbtcBalance) / 1e8 : 0} BTC
       </h2>
 
-      <ApproveTransfer />
+      <ApproveTransfer isReady={isReady} approveTransfer={approveTransfer} />
 
       <div className='withdraw-section'>
         <h3 className='section-title'>Withdraw from Vault</h3>

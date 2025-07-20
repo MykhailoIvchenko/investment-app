@@ -5,14 +5,8 @@
       "type": "motoko"
     },
     "investment-app-frontend": {
-      "dependencies": [
-        "investment-app-backend"
-      ],
-      "source": [
-        "src/investment-app-frontend/dist"
-      ],
-      "type": "assets",
-      "workspace": "investment-app-frontend"
+      "source": ["src/investment-app-frontend/dist"],
+      "type": "assets"
     }
   },
   "defaults": {

@@ -13,13 +13,10 @@ type UseUserData = () => {
 
 export const useUserData: UseUserData = () => {
   const user = useSelectUser();
-
   const setUserData = useUserDispatch();
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
-
   const principalId = user?.principalId;
-
   const actor = useDfinityAgent();
 
   const getUserDataAndSet = async () => {
@@ -27,19 +24,19 @@ export const useUserData: UseUserData = () => {
       setIsLoading(true);
 
       if (principalId && actor) {
-        const userDataArray = (await actor.get_user()) as IUser[];
-        if (userDataArray.length > 0) {
-          const userData = userDataArray[0];
+        const userData = (await actor.get_user()) as IUser | null;
 
-          const dataToSet = {
-            username: userData!.username,
-            principalId: principalId,
-          };
-          setUserData(dataToSet);
+        if (userData) {
+          setUserData({
+            principalId,
+            username: userData.username || '',
+            walletsConfigs: userData.walletsConfigs || [],
+          });
         }
       }
     } catch (error) {
-      toast.error('An error occured during the user data retreiving');
+      toast.error('An error occurred during the user data retrieving');
+      console.error(error);
     } finally {
       setIsLoading(false);
     }
@@ -53,13 +50,13 @@ export const useUserData: UseUserData = () => {
         await actor.register_user(newUsername);
 
         setUserData({
-          username: newUsername,
           principalId,
+          username: newUsername,
+          walletsConfigs: user?.walletsConfigs || [],
         });
       }
     } catch (error) {
-      console.log('REGISTRATION ERROR ', error);
-      toast.error('An error occured during the registration');
+      toast.error('An error occurred during the registration');
     } finally {
       setIsLoading(false);
     }

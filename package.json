@@ -13,6 +13,7 @@
   },
   "type": "module",
   "workspaces": [
-    "src/investment-app-frontend"
+    "src/investment-app-frontend",
+    "src/investment-app-backend"
   ]
 }

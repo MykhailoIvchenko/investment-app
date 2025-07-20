@@ -6,8 +6,8 @@ import { useEffect, useState } from 'react';
 import { ckbtcIdlFactory } from '../../../shared/ckbtc_idl';
 import { toast } from 'react-toastify';
 
-const CKBTC_CANISTER_ID = 'mxzaz-hqaaa-aaaar-qaada-cai'; // ckTESTBTC
-const VAULT_CANISTER_ID = 'xxx...cai';
+const CKBTC_CANISTER_ID = 'mc6ru-gyaaa-aaaar-qaaaq-cai'; // ckTESTBTC
+const VAULT_CANISTER_ID = 'uzt4z-lp777-77774-qaabq-cai';
 const HOST = 'https://icp-api.io';
 
 type ICRC1BalanceOf = ActorMethod<
