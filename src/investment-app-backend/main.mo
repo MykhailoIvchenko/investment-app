@@ -108,6 +108,51 @@ actor InvestmentApp {
   let ckbtcCanisterId : Principal = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
   let icrc1 : ICRC1.ICRC1 = actor(Principal.toText(ckbtcCanisterId));
 
+  let ckbtcCanister = actor("rrkah-fqaaa-aaaaa-aaaaq-cai") : actor {
+    icrc2_transfer_from : shared ICRC1.TransferArgs -> async ICRC1.Result;
+    icrc1_balance_of : shared query ICRC1.Account -> async ICRC1.Token;
+  };
+
+  public shared ({ caller }) func deposit_to_vault_account(
+    amount: Nat
+  ) : async ICRC1.Result<Nat, Text> {
+    let principal_id = Principal.toText(caller);
+
+    switch (get_user_by_id(principal_id)) {
+      case (null) {
+        return #err("User not registered");
+      };
+      case (?user) {
+        let to_subaccount = user.wallets_configs[0].subaccount;
+
+        let transfer_args: ICRC1.TransferArgs = {
+          from_subaccount = null;
+          to = {
+            owner = Principal.fromActor(this);
+            subaccount = ?to_subaccount;
+          };
+
+          amount = amount;
+          fee = ?5;
+          memo = null;
+          created_at_time = ?Time.now();
+          expires_at = null;
+        };
+
+        try {
+          let result = await ckbtcCanister.icrc2_transfer_from(transfer_args);
+          switch (result) {
+            case (#ok(block_index)) return #ok(block_index);
+            case (#err(transfer_error)) return #err("Transfer failed: " # debug_show(transfer_error));
+          };
+        } catch (e) {
+          return #err("Caught error: " # Error.message(e));
+        };
+      };
+    };
+  };
+
+
 
   //Functions for development and debug
   public query func get_all_users() : async Trie.Trie<Text, Types.User> {
