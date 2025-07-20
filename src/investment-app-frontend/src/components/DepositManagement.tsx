@@ -22,8 +22,11 @@ const DepositManagement: React.FC = () => {
       return;
     }
     const amountBigInt = BigInt(Math.floor(amountNum * 1e8));
-    await withdraw(amountBigInt);
-    setWithdrawAmount('');
+
+    if (user?.walletsConfigs[0]) {
+      await withdraw(user?.walletsConfigs[0]?.subaccount, amountBigInt);
+      setWithdrawAmount('');
+    }
   };
 
   return (
