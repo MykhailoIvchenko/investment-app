@@ -19,6 +19,8 @@ actor InvestmentApp {
   stable var users: Trie.Trie<Text, Types.User> = Trie.empty();
   stable var vaultUsers: Trie.Trie<Principal, Types.UserConfig> = Trie.empty();
 
+  private var timers: [Nat] = [];
+
   private func get_user_by_id(principal_id: Text) : ?Types.User {
     switch (Trie.get(users, Helpers.key(principal_id), Text.equal)) {
         case (?user) return ?user;
@@ -159,6 +161,59 @@ actor InvestmentApp {
     };
     let balance = await ledger_canister.icrc1_balance_of(owner_rec);
     return Nat64.fromNat(balance);
+  };
+
+  public shared ({ caller }) func create_recurrent_deposit(
+    amount: Nat,
+    frequency: Types.Frequency,
+  ) : async Result.Result<Nat, Text> {
+    let principal_id = Principal.toText(caller);
+
+    switch (get_user_by_id(principal_id)) {
+      case (null) return #err("User not registered");
+      case (?user) {
+
+        let subaccount = user.wallets_configs[0].subaccount;
+
+        let now = Time.now();
+
+        let recurring = {
+          amount = amount;
+          frequency = frequency;
+          next_deposit_time = now;
+        };
+
+        update_user_recurring(principal_id, subaccount, recurring);
+
+        func pay() : async () {
+          let transfer_result = await deposit_to_vault_account(amount);
+
+          switch (transfer_result) {
+            case (#ok(_)) {
+              let next_time = switch (frequency) {
+                case (#daily) Time.addSeconds(now, 86400);
+                case (#weekly) Time.addSeconds(now, 604800);
+                case (#monthly) Time.addDays(now, 30);
+                case (#quarterly) Time.addDays(now, 90);
+              };
+
+              update_next_deposit_time(principal_id, subaccount, next_time);
+
+              let delay = Time.diff(next_time, Time.now());
+
+              Timer.setTimer(#nanoseconds delay, pay);
+            };
+            case (#err(_)) {
+              Debug.print("Payment failed");
+            };
+          };
+        };
+
+        await pay();
+
+        return #ok(1);
+      };
+    };
   };
 
 
