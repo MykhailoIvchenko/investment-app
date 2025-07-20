@@ -3,7 +3,8 @@ import Text "mo:base/Text";
 import Principal "mo:base/Principal";
 import Iter "mo:base/Iter";
 import Char "mo:base/Char";
-import Hex "mo:base/Hex";
+import Nat8 "mo:base/Nat8";
+import Nat32 "mo:base/Nat32";
 
 
 func key(t: Text) : Types.Key<Text> { { hash = Text.hash t; key = t } };
@@ -29,9 +30,9 @@ func validate_username(username: Text): Bool {
 
 func convert_nat4_to_text(n : Nat8) : Text {
   if (n < 10) {
-    Char.toText(Char.fromNat(48 + n))
+    Char.toText(Char.fromNat32(Nat32.fromNat(48 + Nat8.toNat(n))))
   } else {
-    Char.toText(Char.fromNat(87 + n))
+    Char.toText(Char.fromNat32(Nat32.fromNat(87 + Nat8.toNat(n))))
   }
 };
 
@@ -42,5 +43,5 @@ func convert_nat8_to_text(byte : Nat8) : Text {
 };
 
 func convert_buffer_to_hex(buffer : [Nat8]) : Text {
-  Text.join("", Iter.map(buffer, convert_nat8_to_text));
+  Text.join("", Iter.map(Iter.fromArray(buffer), convert_nat8_to_text));
 };
