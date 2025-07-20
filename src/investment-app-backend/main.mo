@@ -152,6 +152,14 @@ actor InvestmentApp {
     };
   };
 
+  public shared ({ caller }) func get_wallet_balance(wallet: ?Blob) : async Nat64 {
+    let owner_rec = {
+      owner = caller;
+      subaccount = wallet;
+    };
+    let balance = await ledger_canister.icrc1_balance_of(owner_rec);
+    return Nat64.fromNat(balance);
+  };
 
 
   //Functions for development and debug
